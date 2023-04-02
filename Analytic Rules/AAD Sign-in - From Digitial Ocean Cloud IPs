@@ -1,0 +1,31 @@
+//AAD Sign-in - From Digitial Ocean (DO) Cloud IPs
+//We want to find when a hacker uses a public cloud VM that uses a correct password (before CA)
+//
+let lookback = 1h;
+let Subnets_DO = Subnets_DO_fn;
+let lookup = toscalar(Subnets_DO | summarize l=make_list(list_Subnets));
+let Matching_DO_IPv4s = SigninLogs
+| where TimeGenerated > ago(lookback)
+| where IPAddress !contains ":"
+| mv-apply l=lookup to typeof(string) on
+(
+  where ipv4_is_match(IPAddress, l)
+)
+| project-away l
+| distinct IPAddress;
+let Matching_DO_IPv6s = SigninLogs
+| where TimeGenerated > ago(lookback)
+| where IPAddress contains ":"
+| mv-apply l=lookup to typeof(string) on
+(
+  where ipv6_is_match(IPAddress, l)
+)
+| project-away l
+| distinct IPAddress;
+//
+SigninLogs
+| where TimeGenerated > ago(lookback)
+| where parse_json(AuthenticationDetails)[0].succeeded == true //correct password
+//| where ConditionalAccessStatus != "failure" //Passed through CA ("success" or "not applied")
+| where IPAddress in (Matching_DO_IPv4s) or IPAddress in (Matching_DO_IPv6s)
+| distinct ClientAppUsed, UserPrincipalName, tostring(DeviceDetail.browser), tostring(DeviceDetail.deviceId), tostring(DeviceDetail.operatingSystem), ConditionalAccessStatus, tostring(parse_json(AuthenticationDetails)[0].succeeded), IPAddress, tostring(UserAgent), tostring(DeviceDetail.displayName), tostring(DeviceDetail.trustType), tostring(ConditionalAccessPolicies), tostring(Status.failureReason), tostring(Status.errorCode), AppDisplayName, RiskLevelDuringSignIn, Identity, AuthenticationRequirement
