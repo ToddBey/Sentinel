@@ -1,0 +1,16 @@
+//DC - Builtin Administrator - Failed Logins
+//
+let timeframe = 1h;
+let CT_Offset = 6h; //Summer 5h (CDT); Winter 6h (CST)
+SecurityEvent
+| where TargetAccount endswith "administrator" //Update username
+| extend Account = replace(@".COM", "", TargetAccount) //Normalizes domain
+| where Account startswith "ABCDomain" //domain logins only
+| where TimeGenerated > ago(timeframe)
+| where EventID == 4625
+| where AccountType =~ "User"
+| where Account !in ('\\', '-\\-')
+| extend Account_Deleted_SID = TargetSid
+| summarize Last_Login_CT = max(TimeGenerated) by Account, Account_Deleted_SID, Activity, Workstation, IpAddress, LogonTypeName
+| extend Last_Login_CT = format_datetime(Last_Login_CT - CT_Offset, 'yyyy-MM-dd h:mm tt')
+| distinct Account, Last_Login_CT, Workstation, IpAddress, Activity, LogonTypeName
